@@ -1,11 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 
-
 type Question = {
-  question: string;
-  correct_answer: string;
-  incorrect_answers: string[];
+  description: string;
+  options: { id: number; description: string; is_correct: boolean }[];
 };
 
 export default function Home() {
@@ -13,90 +11,190 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(false);
   const [quizStarted, setQuizStarted] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [selectedAnswers, setSelectedAnswers] = useState<Map<number, { isCorrect: boolean; selectedOption: number | null }>>(new Map());
+  const [score, setScore] = useState<number>(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [timeLeft, setTimeLeft] = useState<number>(20);
+  const [quizCompleted, setQuizCompleted] = useState<boolean>(false);
+  const [showFinalResults, setShowFinalResults] = useState<boolean>(false);
 
-  
   const startQuiz = async () => {
     setLoading(true);
-    setError(""); 
-    const headers = {
-      
-    
-      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,/;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "accept-encoding": "gzip, deflate, br, zstd",
-      "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
-      "cache-control": "max-age=0",
-      "cookie": "__cf_bm=UhnBxZat46pPkKW1tohNDc6lZg5gHIVqM39c2HWSDNg-1739113616-1.0.1.1-gx3bBHmMjdVVu1qv6TMrYGa.ACww2DlOmgusN.SkE5nXL5o6EUnkB_ptI3pX5wKUrvwYF6lddWNpvlV6qkpboQ", // Replace with actual cookie value
-      "if-modified-since": "Sun, 09 Feb 2025 15:06:56 GMT",
-      "priority": "u=0, i",
-      "sec-ch-ua": '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"macOS"',
-      "sec-fetch-dest": "document",
-      "sec-fetch-mode": "navigate",
-      "sec-fetch-site": "none",
-      "sec-fetch-user": "?1",
-      "upgrade-insecure-requests": "1",
-      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-    };
-  
-    try {
-      const res = await fetch("https://api.jsonserve.com/Uw5CrX", {
-        method: "GET",
-        headers: headers,
-      });
-    
+    setError("");
 
-      console.log(res);
+    try {
+      const res = await fetch("/api/quiz");
       if (!res.ok) {
-        throw new Error(`Error: ${res.statusText}`); 
+        throw new Error(`Error: ${res.statusText}`);
       }
-      const data = await res.json(); 
+      const data = await res.json();
       setQuestions(data.questions);
-      setQuizStarted(true); 
+      setQuizStarted(true);
     } catch (error: any) {
       console.error("Error fetching quiz data:", error);
-      setError("Failed to load quiz data. Please try again later."); 
+      setError("Failed to load quiz data. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <h1>Loading quiz...</h1>;
+  useEffect(() => {
+    if (quizStarted && !quizCompleted) {
+      setTimeLeft(20);
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [currentQuestionIndex, quizStarted]);
+
+  useEffect(() => {
+    if (timeLeft === 0) {
+      handleNextQuestion();
+    }
+  }, [timeLeft]);
+
+  const handleAnswerSelection = (questionIndex: number, optionId: number, isCorrect: boolean) => {
+    setSelectedAnswers((prevAnswers) => {
+      const newAnswers = new Map(prevAnswers);
+      newAnswers.set(questionIndex, { isCorrect, selectedOption: optionId });
+
+      const correctAnswers = [...newAnswers.values()].filter((answer) => answer.isCorrect).length;
+      setScore(correctAnswers);
+
+      return newAnswers;
+    });
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex((prevIndex) => prevIndex + 1);
+      setTimeLeft(20);
+    } else {
+      setQuizCompleted(true);
+    }
+  };
+
+  const handlePreviousQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex((prevIndex) => prevIndex - 1);
+      setTimeLeft(20);
+    }
+  };
+
+  
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-2xl font-bold mb-4">Welcome to the quiz</h1>
-
-      {error && <p className="text-red-500 mb-4">{error}</p>} 
-
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-800 text-white p-6">
       {!quizStarted ? (
-        <button
-          className="px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition"
-          onClick={startQuiz} 
-        >
-          Start quiz!
-        </button>
-      ) : (
-        <div className="w-full max-w-md p-4 bg-white shadow-lg rounded-lg">
-          <h2 className="text-lg font-semibold">Quiz Time! 🎯</h2>
-          {questions.map((q, index) => (
-            <div key={index} className="mb-6">
-              <h3 className="font-bold">{q.question}</h3>
-              <ul>
-                {[...q.incorrect_answers, q.correct_answer]
-                  .sort(() => Math.random() - 0.5) 
-                  .map((answer, i) => (
-                    <li
-                      key={i}
-                      className="mt-2 p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
-                    >
-                      {answer}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ))}
+        <div className="w-full max-w-md p-10 bg-blue-900 text-white rounded-lg shadow-lg">
+          <h1 className="text-xl font-bold mb-4">Biology quiz <span className="font-extrabold">(10)</span></h1>
+          <p className="text-gray-300 mt-2">All the best!</p>
+          <p className="text-white font-bold mt-4">200 secs Test Practice</p>
+          <div className="w-full h-1.5 bg-gray-700 rounded-full mt-2"></div>
+          {error && <p className="text-red-400 mb-4">{error}</p>}
+          <button className="mt-6 w-full py-3 bg-teal-500 text-white text-lg font-semibold rounded-full hover:bg-teal-600 transition" onClick={startQuiz}>
+            Start Quiz →
+          </button>
         </div>
+      ) : !quizCompleted ? (
+        <div className="w-full max-w-md p-6 bg-blue-900 shadow-lg rounded-lg">
+          <h2 className="text-lg font-semibold mb-4">Quiz Time! 🎯</h2>
+          {questions.length > 0 && currentQuestionIndex < questions.length ? (
+            <div>
+              <h3 className="font-bold mb-4">
+                Question {currentQuestionIndex + 1}: {questions[currentQuestionIndex].description}
+              </h3>
+              <ul>
+                {questions[currentQuestionIndex].options.map((answer, index) => {
+                  const selectedAnswer = selectedAnswers.get(currentQuestionIndex);
+                  const isAnswerSelected = selectedAnswer?.selectedOption === answer.id;
+                  const isAnswerCorrect = isAnswerSelected && answer.is_correct;
+                  const isAnswerWrong = isAnswerSelected && !answer.is_correct;
+
+                  return (
+                    <li key={answer.id}
+                      className={`mt-2 p-3 rounded cursor-pointer flex items-center hover:bg-gray-600 ${
+                        isAnswerCorrect ? "bg-green-500 text-white" : isAnswerWrong ? "bg-red-500 text-white" : "bg-gray-700"
+                      }`}
+                      onClick={() => handleAnswerSelection(currentQuestionIndex, answer.id, answer.is_correct)}
+                    >
+                      <span className="font-bold mr-2">{index + 1}.</span> {answer.description}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="mt-4 text-gray-300 font-bold">Your Score: {score} / {questions.length}</div>
+              <div className="mt-4 text-yellow-400 font-bold">Time Left: {timeLeft}s</div>
+
+              <div className="mt-6 flex justify-between">
+                {currentQuestionIndex > 0 && (
+                  <button onClick={handlePreviousQuestion} className="px-4 py-2 bg-gray-500 text-white font-bold rounded-lg hover:bg-gray-600 transition">
+                    Previous
+                  </button>
+                )}
+                <button onClick={handleNextQuestion} className="px-4 py-2 bg-yellow-500 text-blue-900 font-bold rounded-lg hover:bg-yellow-600 transition">
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : !showFinalResults ? (
+        <div className="w-full max-w-md p-6 bg-blue-900 shadow-lg rounded-lg">
+          <h2 className="text-lg font-semibold mb-4">Quiz Summary 📊</h2>
+          <ul>
+            {questions.map((question, index) => {
+              const selectedAnswer = selectedAnswers.get(index);
+              return (
+                <li key={index} className="mb-3">
+                  <strong>Q{index + 1}:</strong> {question.description} <br />
+                  <span className={selectedAnswer?.isCorrect ? "text-green-400" : "text-red-400"}>
+                    {selectedAnswer?.isCorrect ? "✔ Correct" : "✖ Incorrect"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <button onClick={() => setShowFinalResults(true)} className="mt-4 px-4 py-2 bg-yellow-500 text-blue-900 font-bold rounded-lg hover:bg-yellow-600 transition">
+            Next →
+          </button>
+        </div>
+      ) : (
+        <div className="w-full max-w-lg p-20 bg-gray-900 text-white rounded-xl text-center shadow-lg">
+  {/* Badge System */}
+  <div className="mb-6">
+    {((score / questions.length) * 100) >= 80 ? (
+      <span className="text-yellow-400 text-3xl font-extrabold">🥇 Gold Badge</span>
+    ) : ((score / questions.length) * 100) >= 50 ? (
+      <span className="text-gray-300 text-3xl font-extrabold">🥈 Silver Badge</span>
+    ) : (
+      <span className="text-orange-500 text-3xl font-extrabold">🥉 Bronze Badge</span>
+    )}
+  </div>
+
+  
+  <h1 className="text-4xl font-extrabold text-green-400">Congratulations! </h1>
+  
+  
+  <p className="text-2xl font-semibold mt-4">Total Score: {score} / {questions.length}</p>
+  <p className="text-xl text-green-300 mt-2">Accuracy: {((score / questions.length) * 100).toFixed(0)}%</p>
+  <button
+    className="mt-6 px-6 py-3 bg-red-500 text-white text-lg font-semibold rounded-lg hover:bg-red-600 transition"
+    onClick={() => {
+      setQuizStarted(false);
+      setQuizCompleted(false);
+      setScore(0);
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers(new Map());
+    }}
+  >
+    End Quiz & Restart 🔄
+  </button>
+</div>
+
       )}
     </div>
   );
